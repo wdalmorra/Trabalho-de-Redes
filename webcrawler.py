@@ -6,9 +6,17 @@ import sys
 import os
 
 
-# FLAG PARA DEBUG
+# FLAGS PARA DEBUG
+
+# SEM ESCRITA
 # Quando ela eh True, nenhum arquivo ou diretorio eh criado.
-NO_WRITE_FLAG = True
+DEBUG_FLAG = True
+
+# IMPRIME CABECALHO
+# Quando ela eh True, o cabecalho obtido como resposta eh mostrado abaixo do
+# endereco do site
+IMPRIME_CABECALHO = False
+
 
 
 def GeraLink(scheme, host, path, s):
@@ -27,13 +35,13 @@ def CriaDiretorios(host, path):
 	# Diretorio correspondente ao host
 	caminho = host
 	if not (caminho in diretorios):
-		if not NO_WRITE_FLAG:		# DEBUG
+		if not DEBUG_FLAG:		# DEBUG
 			os.system("mkdir " + caminho + ' 2>> /dev/null')
 		diretorios.append(caminho)
 
 	# Diretorios correspondentes ao path
 	novalista = re.split(r'/', path)
-	arq = novalista.pop()		# o ultimo elemento eh um nome de arquivo e nao de pasta
+	novalista.pop()			# o ultimo elemento eh um nome de arquivo e nao de pasta
 	if novalista:
 		novalista.pop(0)	# o primeiro elemento eh uma string nula
 	npastas = len(novalista)
@@ -41,23 +49,18 @@ def CriaDiretorios(host, path):
 	while i < npastas:
 		caminho = caminho + '/' + novalista[i]
 		if not (caminho in diretorios):
-			if not NO_WRITE_FLAG:		# DEBUG
+			if not DEBUG_FLAG:		# DEBUG
 				os.system("mkdir " + caminho + ' 2>> /dev/null')
 			diretorios.append(caminho)
 		i = i + 1
 
-	# if arq:
-	# 	nome = caminho + '/' + arq
-	# else:
-	# 	nome = caminho + '/SUBSTITUIR.html'
-
-	return (caminho, arq)
+	return caminho
 
 
 
 def Busca(url, depth):
 
-	BLOCO = 8192
+	BLOCO = 2048
 
 	houve_erro = False
 
@@ -70,8 +73,6 @@ def Busca(url, depth):
 	else:
 		port = parse.port
 	
-	# addr = url
-	
 	addr = host + path
 
 	if not (addr in lista_visitados):
@@ -79,74 +80,72 @@ def Busca(url, depth):
 		lista_visitados.append(addr)
 
 		scheme = parse.scheme
-		print scheme + "://" + host + path
-		# tries = 3
-		# while tries > 0:
+		print scheme + '://' + host + path + ' '
+
+		# Inicia a comunicacao, envia a requisicao e recebe o cabecalho
+		# mais o inicio do conteudo, se houver
 		try:
 			s = socket.create_connection((host, port), 5)
 			s.send("GET /" + parse.path + " HTTP/1.1\r\nHost: "+ host + "\r\n\r\n")
 			strg = s.recv(BLOCO)
-		# time.sleep(1)
+		
 		except socket.error:
-			erro = sys.exc_info()[:2]
-			print erro
+			if DEBUG_FLAG:		# DEBUG
+				erro = sys.exc_info()[:2]
+				print erro
+			else:
+				print '\t<erro no socket>\n'
 			houve_erro = True
-				# if erro == socket.timeout:
-					# print "Primeiro AQUI"
-					# tries -= 1
-
-		# if tries == 0:
-			# print "Verify your connection!"
-			# time.sleep(1)
 
 		if not houve_erro:
 
-			ret = CriaDiretorios(host,path)
-
-			caminho = ret[0]
-			# print "Caminho: " + caminho
-			arq = ret[1]
-			# print "Arq: " + arq
-			
-			if arq:
-				nome = caminho + '/' + arq
-			else:
-				nome = caminho + '/SUBSTITUIR.html'
-
-			#  Nem sempre a mensagem encerra com connection close
-			#  A maneira correta eh pegar a primeira linha em branco
-			#  como separador entre cabecalho e resto
-
 			bytes_recebidos = len(strg)
 
+			# Separa o cabecalho do inicio do conteudo
 			resposta = re.match(r'(.*)\n\r\n(.*)', strg, re.DOTALL)
 			cabecalho = resposta.group(1)
 			conteudo = resposta.group(2)
 
-			# print cabecalho + '\n'
-			# print conteudo + '\n'
+			if IMPRIME_CABECALHO:
+				print '\n' + cabecalho + '\n\n'
 			
-			# CORRIGIR: pode retornar index out of range para um cabecalho
-			# nulo ou com uma unica linha.
+			# Define se a requisicao foi bem sucedida
 			codigo_retorno = int(cabecalho.split(" ", 2)[1])
 
+			# Verifica se o cabecalho disponibiliza o tamanho do
+			# conteudo
 			batata = re.search(r'Content-Length: (\d+)', cabecalho)
 			if batata:
 				tamanho_disponivel = True
 				tam = int(batata.group(1))
-				# print 'Tamanho disponivel ' + str(tam)
 			else:
 				tamanho_disponivel = False
 			
 			
-			if codigo_retorno == 200 or codigo_retorno == 300:	# Achei o site de prima!
+			if codigo_retorno == 200 or codigo_retorno == 300:
+			# Site encontrado
+
+				# Assegura que os diretorios necessarios
+				# existem
+				caminho = CriaDiretorios(host,path)
 				
-				if not NO_WRITE_FLAG:		# DEBUG
+				# Monta o caminho do arquivo de saida
+				re_arquivo = re.search(r'/([^/]+)$', path)
+				if re_arquivo:
+					arq = re_arquivo.group(1)
+				else:
+					arq = 'PRINCIPAL'
+				
+				nome = caminho + '/' + arq
+
+				
+				if not DEBUG_FLAG:		# DEBUG
 					saida = open(nome, 'w')
 				
-				if not NO_WRITE_FLAG:		# DEBUG
+				if not DEBUG_FLAG:		# DEBUG
 					saida.write(conteudo)
 
+				# Recebe o restante do conteudo
 				# Se houver indicacao explicita de content-length,
 				# ela deve ser respeitada. Senao, paramos quando o
 				# server para de mandar.
@@ -156,9 +155,8 @@ def Busca(url, depth):
 						strg = s.recv(BLOCO)
 						ultimo_br = bytes_recebidos
 						bytes_recebidos += len(strg)
-						# print 'Bytes recebidos ' + str(bytes_recebidos)
 						conteudo = conteudo + strg
-						if not NO_WRITE_FLAG:		# DEBUG
+						if not DEBUG_FLAG:		# DEBUG
 							saida.write(strg)
 						if bytes_recebidos == ultimo_br:
 							break
@@ -167,42 +165,41 @@ def Busca(url, depth):
 						strg = s.recv(BLOCO)
 						bytes_recebidos = (len(strg))
 						conteudo = conteudo + strg
-						if not NO_WRITE_FLAG:		# DEBUG
+						if not DEBUG_FLAG:		# DEBUG
 							saida.write(strg)
 
-				# print len(conteudo)
 
-				if not NO_WRITE_FLAG:		# DEBUG
+				if not DEBUG_FLAG:		# DEBUG
 					saida.close()
+
+				# Procura todos os links dentro de tags
+				# <a href> na pagina recebida
+				strg = conteudo
+				strg = re.sub(r'<!--[\w\W]*?-->',r'',strg)
+				matchies = re.findall(r'<a [\w\W]*?href=\"([^\"]+)\"',strg)
+				for match in matchies:
+					link = GeraLink(parse.scheme, host, caminho, match)
+					if link:
+						lista_por_visitar.append(link)
+				
+				print "\t<recebido>\n"
 			
 			elif codigo_retorno == 301 or codigo_retorno == 302 or codigo_retorno == 307:
 			# Fui redirecionado!
 				
-				novo_endereco = re.search(r'Location: (.+)', cabecalho)
-				if novo_endereco:
-					lista_por_visitar.append(novo_endereco.group(1))
+				re_novo_endereco = re.search(r'Location: (.+)\r', cabecalho)
+				if re_novo_endereco:
+					novo_endereco = re_novo_endereco.group(1)
+					lista_por_visitar.append(novo_endereco)
+					msg = '\t<redirecionado para ' + str(novo_endereco) + '>\n'
+					print msg
+				else:
+					print '\t<redirecionado sem endereco destino>\n'
+			
+			else:
+				print '\t<resposta com codigo invalido>\n'
 						
 			s.close()
-
-			strg = conteudo
-
-			strg = re.sub(r'<!--[\w\W]*?-->',r'',strg)
-
-			matchies = re.findall(r'<a [\w\W]*?href=\"([^\"]+)\"',strg)
-			for match in matchies:
-				# print caminho
-				# if not (re.match(r'mailto:|javascript:', match)):
-				# 	if re.match(r'/', match):
-				# 		match = parse.scheme + "://" + host + match
-				# 	elif not(re.match(r'https?://', match)):
-				# 		match = parse.scheme + "://" + caminho + '/' + match
-
-				link = GeraLink(parse.scheme, host, caminho, match)
-
-				print "\tLink " + link
-
-				if link:
-					lista_por_visitar.append(link)
 
 
 lista_visitados = []
