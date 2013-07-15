@@ -11,7 +11,7 @@ import os
 # SEM ESCRITA
 # Quando ela eh True, nenhum arquivo ou diretorio eh criado.
 # Adicionalmente, mensagens de erro mais completas sao mostradas.
-DEBUG_FLAG = True
+DEBUG_FLAG = False
 
 # IMPRIME CABECALHO
 # Quando ela eh True, o cabecalho obtido como resposta eh mostrado abaixo do
@@ -112,7 +112,7 @@ def Busca(url, prof_atual):
 			bytes_recebidos = len(strg)
 
 			# Separa o cabecalho do inicio do conteudo
-			resposta = re.match(r'(.*)\n\r\n(.*)', strg, re.DOTALL)
+			resposta = re.match(r'(.*?)\n\r\n(.*)', strg, re.DOTALL)
 			cabecalho = resposta.group(1)
 			conteudo = resposta.group(2)
 
@@ -177,7 +177,8 @@ def Busca(url, prof_atual):
 							houve_erro = True
 							break
 				else:
-					while(bytes_recebidos == BLOCO):
+					tentativas = 5
+					while(tentativas > 0):
 						try:
 							strg = s.recv(BLOCO)
 							bytes_recebidos = (len(strg))
@@ -188,7 +189,12 @@ def Busca(url, prof_atual):
 							SinalizaErro()
 							houve_erro = True
 							break
+						if bytes_recebidos == 0:
+							tentativas -= 1
+						else:
+							tentativas = 5
 
+				# print conteudo
 
 				if not DEBUG_FLAG:		# DEBUG
 					saida.close()
@@ -234,6 +240,8 @@ def robots(url):
 	if not (parse.netloc in robots_visitados):
 		robots_visitados.append(parse.netloc)
 
+		# print "entrei"
+
 		if parse.port == None:
 			port = 80
 		else:
@@ -254,31 +262,58 @@ def robots(url):
 		if houve_erro:
 			return
 
-		resposta = re.match(r'(.*)\n\r\n(.*)', result, re.DOTALL)
+		# print "Consultei"
+
+		resposta = re.match(r'(.*?)\n\r\n(.*)', result, re.DOTALL)
 		cabecalho = resposta.group(1)
 		conteudo = resposta.group(2)
+		# print cabecalho
 
 		codigo_retorno = int(cabecalho.split(' ', 2)[1])
 
 		if codigo_retorno != 200:
 			return
 
-		tam = int(re.search(r'Content-Length: (.*)', cabecalho).group(1))
+		hah = re.search(r'Content-Length: (.*)', cabecalho)
+		if hah:
+			tam = int(hah.group(1))
 
-		while len(conteudo) < tam:
-			try:
-				result = s.recv(BLOCO)
-				# print len(result)
-				conteudo += result
-			except:
-				SinalizaErro()
-				houve_erro = True
-				break
+		# print "Ainda nao"
+		# print tam
+
+		if hah:
+			while len(conteudo) < tam:
+				try:
+					result = s.recv(BLOCO)
+					# print len(result)
+					conteudo += result
+				except:
+					SinalizaErro()
+					houve_erro = True
+					break
+		else:
+			tentativas = 5
+			while(tentativas > 0):
+				try:
+					result = s.recv(BLOCO)
+					# print len(result)
+					conteudo += result
+					bytes_recebidos = len(result)
+				except:
+					SinalizaErro()
+					houve_erro = True
+					break
+				if bytes_recebidos == 0:
+					tentativas -= 1
+				else:
+					tentativas = 5
 
 		if houve_erro:
 			return
 
-		matchies = re.findall(r'D?d?isallow: (.*)', conteudo)
+		# print "Peguei"
+
+		matchies = re.findall(r'[Dd]isallow: (.*)', conteudo)
 		for match in matchies:
 			# print match
 			link = parse.netloc + match
@@ -286,8 +321,23 @@ def robots(url):
 				lista_visitados.append(link)
 				print 'robots.txt: ' + link
 
-def main():
+		# print "Achei os robots"
+
+def main(argc, argv):
+	if argc != 3:
+		print "Numero de parametros incorreto"
+		sys.exit()
+
+	profundidade = argv[1]
+	URL_inicial = argv[2]
+
+	if not(re.match(r'https?://', URL_inicial)):
+		URL_inicial = "http://" + URL_inicial
+
+	lista_por_visitar.append(URL_inicial)
+
 	prof_atual = 0
+
 	while prof_atual <= profundidade:								# Profundidade
 		tam = len(lista_por_visitar)
 		j = 0
@@ -298,6 +348,12 @@ def main():
 			j += 1
 		prof_atual += 1
 
+<<<<<<< HEAD
+robots_visitados = []
+lista_visitados = []
+diretorios = []
+lista_por_visitar = []
+=======
 num_parametros = len(sys.argv)
 if num_parametros != 3:
 	print "Numero de parametros incorreto"
@@ -311,5 +367,6 @@ if not(re.match(r'https?://', URL_inicial)):
 	URL_inicial = "http://" + URL_inicial
 lista_por_visitar = [URL_inicial]
 print lista_por_visitar
+>>>>>>> 3904e5a9822de6370e1006b3ed98523479f6c90d
 
-if __name__ == '__main__': main()
+if __name__ == '__main__': main(len(sys.argv), sys.argv)
