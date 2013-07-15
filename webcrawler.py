@@ -298,10 +298,18 @@ def main():
 			j += 1
 		prof_atual += 1
 
-profundidade = 3
+num_parametros = len(sys.argv)
+if num_parametros != 3:
+	print "Numero de parametros incorreto"
+	sys.exit()
+profundidade = sys.argv[1]
+URL_inicial = sys.argv[2]
 robots_visitados = []
 lista_visitados = []
 diretorios = []
-lista_por_visitar = ['http://minerva.ufpel.edu.br/~campani/']
+if not(re.match(r'https?://', URL_inicial)):
+	URL_inicial = "http://" + URL_inicial
+lista_por_visitar = [URL_inicial]
+print lista_por_visitar
 
 if __name__ == '__main__': main()
