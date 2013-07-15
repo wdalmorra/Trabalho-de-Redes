@@ -4,7 +4,7 @@ import re
 import urlparse
 import sys
 import os
-
+from threading import *
 
 # FLAGS PARA DEBUG
 
@@ -18,6 +18,7 @@ DEBUG_FLAG = False
 # endereco do site
 IMPRIME_CABECALHO = False
 
+NTHREADS = 8
 BLOCO = 2048
 
 def SinalizaErro():
@@ -45,10 +46,14 @@ def GeraLink(scheme, host, path, s):
 def CriaDiretorios(host, path):
 	# Diretorio correspondente ao host
 	caminho = host
+	lock.acquire()
 	if not (caminho in diretorios):
+		diretorios.append(caminho)
+		lock.release()
 		if not DEBUG_FLAG:		# DEBUG
 			os.system("mkdir " + caminho + ' 2>> /dev/null')
-		diretorios.append(caminho)
+	else:
+		lock.release()
 
 	# Diretorios correspondentes ao path
 	novalista = re.split(r'/', path)
@@ -59,10 +64,14 @@ def CriaDiretorios(host, path):
 	i = 0
 	while i < npastas:
 		caminho = caminho + '/' + novalista[i]
+		lock.acquire()
 		if not (caminho in diretorios):
+			diretorios.append(caminho)
+			lock.release()
 			if not DEBUG_FLAG:		# DEBUG
 				os.system("mkdir " + caminho + ' 2>> /dev/null')
-			diretorios.append(caminho)
+		else:
+			lock.release()
 		i = i + 1
 
 	return caminho
@@ -70,6 +79,8 @@ def CriaDiretorios(host, path):
 
 
 def Busca(url, prof_atual):
+
+	global lista_por_visitar
 
 	houve_erro = False
 
@@ -84,9 +95,11 @@ def Busca(url, prof_atual):
 	
 	addr = host + path
 
+	lock.acquire()
 	if not (addr in lista_visitados):
 
 		lista_visitados.append(addr)
+		lock.release()
 
 		scheme = parse.scheme
 		print scheme + '://' + host + path + ', ' + str(prof_atual)
@@ -204,10 +217,17 @@ def Busca(url, prof_atual):
 				strg = conteudo
 				strg = re.sub(r'<!--[\w\W]*?-->',r'',strg)
 				matchies = re.findall(r'<a [\w\W]*?href=\"([^\"]+)\"',strg)
+
+				visitar = []
+
 				for match in matchies:
 					link = GeraLink(parse.scheme, host, caminho, match)
 					if link:
-						lista_por_visitar.append(link)
+						visitar.append(link)
+
+				lock.acquire()
+				lista_por_visitar += visitar
+				lock.release()
 				
 				if not houve_erro:
 					print "\t<recebido>\n"
@@ -229,6 +249,8 @@ def Busca(url, prof_atual):
 				print '\t<resposta com codigo invalido>\n'
 						
 			s.close()
+	else:
+		lock.release()
 
 def robots(url):
 	resposta = ''
@@ -323,9 +345,40 @@ def robots(url):
 
 		# print "Achei os robots"
 
+
+def procura():
+
+	global nsites
+	global prof_atual
+
+	while True:
+
+		lock.acquire()
+
+		nsites_local = nsites
+		if nsites_local > 0:
+			url = lista_por_visitar.pop(0)
+			parse = urlparse.urlparse(url)
+			if not (parse.netloc in robots_visitados):
+				robots(url)
+			nsites -= 1
+
+		lock.release()
+
+		if nsites_local > 0:
+			Busca(url, prof_atual)
+		else:
+			break
+
+
 def main(argc, argv):
+
+	global nsites
+	global prof_atual
+
 	if argc != 3:
 		print "Numero de parametros incorreto"
+		print "Uso: python webcrawler.py <profundidade> <site>\n"
 		sys.exit()
 
 	profundidade = argv[1]
@@ -336,37 +389,64 @@ def main(argc, argv):
 
 	lista_por_visitar.append(URL_inicial)
 
-	prof_atual = 0
-
 	while prof_atual <= profundidade:								# Profundidade
-		tam = len(lista_por_visitar)
-		j = 0
-		while(j < tam):						# Lista de sites numa determinada profundidade
-			url = lista_por_visitar.pop(0)
-			robots(url)
-			Busca(url, prof_atual)
-			j += 1
+		threads = []
+		nsites = len(lista_por_visitar)
+
+		if nsites < NTHREADS:
+			nthreads = nsites
+		else:
+			nthreads = NTHREADS
+
+		print "nthreads " + str(nthreads)
+
+		k = 0
+		while k < nthreads:
+			t = Thread (target=procura)
+			threads.append(t)
+			t.start()
+			k += 1
+
+		k = 0
+		while k < nthreads:
+			t = threads.pop()
+			t.join()
+			k += 1
+
 		prof_atual += 1
 
-<<<<<<< HEAD
+# def main(argc, argv):
+# 	if argc != 3:
+# 		print "Numero de parametros incorreto"
+# 		print "Uso: python webcrawler.py <profundidade> <site>\n"
+# 		sys.exit()
+
+# 	profundidade = argv[1]
+# 	URL_inicial = argv[2]
+
+# 	if not(re.match(r'https?://', URL_inicial)):
+# 		URL_inicial = "http://" + URL_inicial
+
+# 	lista_por_visitar.append(URL_inicial)
+
+# 	prof_atual = 0
+
+# 	while prof_atual <= profundidade:								# Profundidade
+# 		nsites = len(lista_por_visitar)
+# 		j = 0
+# 		while(j < nsites):						# Lista de sites numa determinada profundidade
+# 			url = lista_por_visitar.pop(0)
+# 			robots(url)
+# 			Busca(url, prof_atual)
+# 			j += 1
+# 		prof_atual += 1
+
 robots_visitados = []
 lista_visitados = []
 diretorios = []
 lista_por_visitar = []
-=======
-num_parametros = len(sys.argv)
-if num_parametros != 3:
-	print "Numero de parametros incorreto"
-	sys.exit()
-profundidade = sys.argv[1]
-URL_inicial = sys.argv[2]
-robots_visitados = []
-lista_visitados = []
-diretorios = []
-if not(re.match(r'https?://', URL_inicial)):
-	URL_inicial = "http://" + URL_inicial
-lista_por_visitar = [URL_inicial]
-print lista_por_visitar
->>>>>>> 3904e5a9822de6370e1006b3ed98523479f6c90d
+lock = Lock()
+nsites = 0
+prof_atual = 0
 
 if __name__ == '__main__': main(len(sys.argv), sys.argv)
