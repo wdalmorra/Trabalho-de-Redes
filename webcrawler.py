@@ -10,6 +10,7 @@ import os
 
 # SEM ESCRITA
 # Quando ela eh True, nenhum arquivo ou diretorio eh criado.
+# Adicionalmente, mensagens de erro mais completas sao mostradas.
 DEBUG_FLAG = True
 
 # IMPRIME CABECALHO
@@ -18,6 +19,15 @@ DEBUG_FLAG = True
 IMPRIME_CABECALHO = False
 
 BLOCO = 2048
+
+def SinalizaErro():
+# Apenas por economia
+	if DEBUG_FLAG:		# DEBUG
+		erro = sys.exc_info()[:2]
+		print erro
+	else:
+		print '\t<erro no socket>\n'
+	return
 
 
 def GeraLink(scheme, host, path, s):
@@ -94,11 +104,7 @@ def Busca(url, prof_atual):
 			# print len(strg)
 		
 		except socket.error:
-			if DEBUG_FLAG:		# DEBUG
-				erro = sys.exc_info()[:2]
-				print erro
-			else:
-				print '\t<erro no socket>\n'
+			SinalizaErro()
 			houve_erro = True
 
 		if not houve_erro:
@@ -167,11 +173,7 @@ def Busca(url, prof_atual):
 							if bytes_recebidos == ultimo_br:
 								break
 						except:
-							if DEBUG_FLAG:		# DEBUG
-								erro = sys.exc_info()[:2]
-								print erro
-							else:
-								print '\t<erro no socket>\n'
+							SinalizaErro()
 							houve_erro = True
 							break
 				else:
@@ -183,11 +185,7 @@ def Busca(url, prof_atual):
 							if not DEBUG_FLAG:		# DEBUG
 								saida.write(strg)
 						except:
-							if DEBUG_FLAG:		# DEBUG
-								erro = sys.exc_info()[:2]
-								print erro
-							else:
-								print '\t<erro no socket>\n'
+							SinalizaErro()
 							houve_erro = True
 							break
 
@@ -205,7 +203,8 @@ def Busca(url, prof_atual):
 					if link:
 						lista_por_visitar.append(link)
 				
-				print "\t<recebido>\n"
+				if not houve_erro:
+					print "\t<recebido>\n"
 			
 			elif codigo_retorno == 301 or codigo_retorno == 302 or codigo_retorno == 307:
 			# Fui redirecionado!
@@ -213,9 +212,10 @@ def Busca(url, prof_atual):
 				re_novo_endereco = re.search(r'Location: (.+)\r', cabecalho)
 				if re_novo_endereco:
 					novo_endereco = re_novo_endereco.group(1)
-					lista_por_visitar.append(novo_endereco)
+					# lista_por_visitar.append(novo_endereco)
 					msg = '\t<redirecionado para ' + str(novo_endereco) + '>\n'
 					print msg
+					Busca(novo_endereco, prof_atual)
 				else:
 					print '\t<redirecionado sem endereco destino>\n'
 			
@@ -248,11 +248,7 @@ def robots(url):
 			# print len(result)
 
 		except socket.error:
-			if DEBUG_FLAG:		# DEBUG
-				erro = sys.exc_info()[:2]
-				print erro
-			else:
-				print '\t<erro no socket>\n'
+			SinalizaErro()
 			houve_erro = True
 
 		if houve_erro:
@@ -275,11 +271,7 @@ def robots(url):
 				# print len(result)
 				conteudo += result
 			except:
-				if DEBUG_FLAG:		# DEBUG
-					erro = sys.exc_info()[:2]
-					print erro
-				else:
-					print '\t<erro no socket>\n'
+				SinalizaErro()
 				houve_erro = True
 				break
 
