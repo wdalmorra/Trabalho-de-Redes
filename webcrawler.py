@@ -11,7 +11,7 @@ from threading import *
 # SEM ESCRITA
 # Quando ela eh True, nenhum arquivo ou diretorio eh criado.
 # Adicionalmente, mensagens de erro mais completas sao mostradas.
-DEBUG_FLAG = False
+DEBUG_FLAG = True
 
 # IMPRIME CABECALHO
 # Quando ela eh True, o cabecalho obtido como resposta eh mostrado abaixo do
@@ -25,21 +25,27 @@ def SinalizaErro():
 # Apenas por economia
 	if DEBUG_FLAG:		# DEBUG
 		erro = sys.exc_info()[:2]
-		print erro
+		ret = str(erro)
+
 	else:
-		print '\t<erro no socket>\n'
-	return
+		ret = '\t<erro no socket>\n'
+
+	return ret
 
 
 def GeraLink(scheme, host, path, s):
 	ret = s
+
 	if (re.match(r'mailto:|javascript:', s)):
 		ret = ""
+
 	else:
 		if re.match(r'/', s):
 			ret = scheme + "://" + host + s
+
 		elif not(re.match(r'https?://', s)):
 			ret = scheme + "://" + path + '/' + s
+
 	return ret
 
 
@@ -47,31 +53,41 @@ def CriaDiretorios(host, path):
 	# Diretorio correspondente ao host
 	caminho = host
 	lock.acquire()
+
 	if not (caminho in diretorios):
 		diretorios.append(caminho)
 		lock.release()
+
 		if not DEBUG_FLAG:		# DEBUG
 			os.system("mkdir " + caminho + ' 2>> /dev/null')
+
 	else:
 		lock.release()
 
 	# Diretorios correspondentes ao path
 	novalista = re.split(r'/', path)
 	novalista.pop()			# o ultimo elemento eh um nome de arquivo e nao de pasta
+
 	if novalista:
 		novalista.pop(0)	# o primeiro elemento eh uma string nula
+
 	npastas = len(novalista)
+
 	i = 0
 	while i < npastas:
 		caminho = caminho + '/' + novalista[i]
 		lock.acquire()
+
 		if not (caminho in diretorios):
 			diretorios.append(caminho)
 			lock.release()
+
 			if not DEBUG_FLAG:		# DEBUG
 				os.system("mkdir " + caminho + ' 2>> /dev/null')
+
 		else:
 			lock.release()
+
 		i = i + 1
 
 	return caminho
@@ -102,7 +118,7 @@ def Busca(url, prof_atual):
 		lock.release()
 
 		scheme = parse.scheme
-		print scheme + '://' + host + path + ', ' + str(prof_atual)
+		msg = scheme + '://' + host + path + ', ' + str(prof_atual) + '\n'
 
 		if not path:
 			path = '/'
@@ -111,13 +127,11 @@ def Busca(url, prof_atual):
 		# mais o inicio do conteudo, se houver
 		try:
 			s = socket.create_connection((host, port), 10)
-			# print "GET " + path + " HTTP/1.1\r\nHost: "+ host
 			s.send("GET " + path + " HTTP/1.1\r\nHost: "+ host + "\r\n\r\n")
 			strg = s.recv(BLOCO)
-			# print len(strg)
 		
 		except socket.error:
-			SinalizaErro()
+			msg += SinalizaErro()
 			houve_erro = True
 
 		if not houve_erro:
@@ -138,9 +152,11 @@ def Busca(url, prof_atual):
 			# Verifica se o cabecalho disponibiliza o tamanho do
 			# conteudo
 			match = re.search(r'Content-Length: (\d+)', cabecalho)
+
 			if match:
 				tamanho_disponivel = True
 				tam = int(match.group(1))
+
 			else:
 				tamanho_disponivel = False
 			
@@ -154,8 +170,10 @@ def Busca(url, prof_atual):
 				
 				# Monta o caminho do arquivo de saida
 				re_arquivo = re.search(r'/([^/]+)$', path)
+
 				if re_arquivo:
 					arq = re_arquivo.group(1)
+
 				else:
 					arq = 'index.html'
 				
@@ -174,36 +192,48 @@ def Busca(url, prof_atual):
 				# server para de mandar.
 				if tamanho_disponivel:
 					bytes_recebidos = len(conteudo)
+
 					while (bytes_recebidos < tam):
+
 						try:
 							strg = s.recv(BLOCO)
 							# print len(strg)
 							ultimo_br = bytes_recebidos
 							bytes_recebidos += len(strg)
 							conteudo = conteudo + strg
+
 							if not DEBUG_FLAG:		# DEBUG
 								saida.write(strg)
+
 							if bytes_recebidos == ultimo_br:
 								break
+
 						except:
-							SinalizaErro()
+							msg += SinalizaErro()
 							houve_erro = True
 							break
+
 				else:
 					tentativas = 5
+
 					while(tentativas > 0):
+
 						try:
 							strg = s.recv(BLOCO)
 							bytes_recebidos = (len(strg))
 							conteudo = conteudo + strg
+
 							if not DEBUG_FLAG:		# DEBUG
 								saida.write(strg)
+
 						except:
-							SinalizaErro()
+							msg += SinalizaErro()
 							houve_erro = True
 							break
+
 						if bytes_recebidos == 0:
 							tentativas -= 1
+
 						else:
 							tentativas = 5
 
@@ -230,23 +260,30 @@ def Busca(url, prof_atual):
 				lock.release()
 				
 				if not houve_erro:
-					print "\t<recebido>\n"
+					msg += "\t<recebido>\n"
+				
+				print msg
 			
 			elif codigo_retorno == 301 or codigo_retorno == 302 or codigo_retorno == 307:
 			# Fui redirecionado!
 				
 				re_novo_endereco = re.search(r'Location: (.+)\r', cabecalho)
+
 				if re_novo_endereco:
 					novo_endereco = re_novo_endereco.group(1)
-					# lista_por_visitar.append(novo_endereco)
-					msg = '\t<redirecionado para ' + str(novo_endereco) + '>\n'
+
+					msg += '\t<redirecionado para ' + str(novo_endereco) + '>\n'
 					print msg
+
 					Busca(novo_endereco, prof_atual)
+
 				else:
-					print '\t<redirecionado sem endereco destino>\n'
+					msg += '\t<redirecionado sem endereco destino>\n'
+					print msg
 			
 			else:
-				print '\t<resposta com codigo invalido>\n'
+				msg += '\t<resposta com codigo invalido>\n'
+				print msg
 						
 			s.close()
 	else:
@@ -254,6 +291,7 @@ def Busca(url, prof_atual):
 
 def robots(url):
 	resposta = ''
+	msg = ''
 
 	houve_erro = False
 
@@ -262,14 +300,12 @@ def robots(url):
 	if not (parse.netloc in robots_visitados):
 		robots_visitados.append(parse.netloc)
 
-		# print "entrei"
-
 		if parse.port == None:
 			port = 80
 		else:
 			port = parse.port
 
-		print parse.netloc + '/robots.txt'
+		msg = parse.netloc + '/robots.txt' + '\n'
 
 		try:
 			s = socket.create_connection((parse.netloc, port), 10)
@@ -284,8 +320,6 @@ def robots(url):
 		if houve_erro:
 			return
 
-		# print "Consultei"
-
 		resposta = re.match(r'(.*?)\n\r\n(.*)', result, re.DOTALL)
 		cabecalho = resposta.group(1)
 		conteudo = resposta.group(2)
@@ -296,14 +330,11 @@ def robots(url):
 		if codigo_retorno != 200:
 			return
 
-		hah = re.search(r'Content-Length: (.*)', cabecalho)
-		if hah:
-			tam = int(hah.group(1))
+		re_tamanho = re.search(r'Content-Length: (.*)', cabecalho)
+		if re_tamanho:
+			tam = int(re_tamanho.group(1))
 
-		# print "Ainda nao"
-		# print tam
-
-		if hah:
+		if re_tamanho:
 			while len(conteudo) < tam:
 				try:
 					result = s.recv(BLOCO)
@@ -333,18 +364,15 @@ def robots(url):
 		if houve_erro:
 			return
 
-		# print "Peguei"
-
 		matchies = re.findall(r'[Dd]isallow: (.*)', conteudo)
 		for match in matchies:
 			# print match
 			link = parse.netloc + match
 			if not (link in lista_visitados):
 				lista_visitados.append(link)
-				print 'robots.txt: ' + link
+				msg += 'robots.txt: ' + link + '\n'
 
-		# print "Achei os robots"
-
+		print msg
 
 def procura():
 
@@ -378,10 +406,16 @@ def main(argc, argv):
 
 	if argc != 3:
 		print "Numero de parametros incorreto"
-		print "Uso: python webcrawler.py <profundidade> <site>\n"
+		print "Uso: python webcrawler.py <profundidade> <url>\n"
 		sys.exit()
 
-	profundidade = argv[1]
+	try:
+		profundidade = int(argv[1])
+	except ValueError:
+		print "Profundidade deve ser um inteiro!"
+		print "Uso: python webcrawler.py <profundidade> <url>\n"
+		sys.exit()
+
 	URL_inicial = argv[2]
 
 	if not(re.match(r'https?://', URL_inicial)):
@@ -398,8 +432,6 @@ def main(argc, argv):
 		else:
 			nthreads = NTHREADS
 
-		print "nthreads " + str(nthreads)
-
 		k = 0
 		while k < nthreads:
 			t = Thread (target=procura)
@@ -415,31 +447,6 @@ def main(argc, argv):
 
 		prof_atual += 1
 
-# def main(argc, argv):
-# 	if argc != 3:
-# 		print "Numero de parametros incorreto"
-# 		print "Uso: python webcrawler.py <profundidade> <site>\n"
-# 		sys.exit()
-
-# 	profundidade = argv[1]
-# 	URL_inicial = argv[2]
-
-# 	if not(re.match(r'https?://', URL_inicial)):
-# 		URL_inicial = "http://" + URL_inicial
-
-# 	lista_por_visitar.append(URL_inicial)
-
-# 	prof_atual = 0
-
-# 	while prof_atual <= profundidade:								# Profundidade
-# 		nsites = len(lista_por_visitar)
-# 		j = 0
-# 		while(j < nsites):						# Lista de sites numa determinada profundidade
-# 			url = lista_por_visitar.pop(0)
-# 			robots(url)
-# 			Busca(url, prof_atual)
-# 			j += 1
-# 		prof_atual += 1
 
 robots_visitados = []
 lista_visitados = []
